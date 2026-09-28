@@ -5,4 +5,5 @@ __pycache__/
 .venv/
 data/cache/
 report.html
+!output/report.html
 analysis.json
