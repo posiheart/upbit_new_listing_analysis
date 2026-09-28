@@ -51,3 +51,28 @@ def test_official_primary_host_and_browser_headers_are_used():
     assert BASE_URLS[0]=="https://fapi.binance.com"
     assert "www.binance.com" not in BASE_URLS
     assert "Mozilla/5.0" in BINANCE_HEADERS["User-Agent"]
+
+def test_successful_response_is_reused_from_cache(tmp_path):
+    class Session:
+        def __init__(self): self.calls=0
+        def get(self,url,**kwargs):
+            self.calls+=1
+            class Response:
+                def raise_for_status(self): pass
+                def json(self): return {"symbols":[]}
+            return Response()
+    session=Session()
+    client=BinanceClient(session=session,cache_dir=tmp_path)
+    assert client.exchange_info()=={"symbols":[]}
+    assert client.exchange_info()=={"symbols":[]}
+    assert session.calls==1
+
+def test_api_error_payload_falls_back_to_next_host():
+    class Session:
+        def get(self,url,**kwargs):
+            class Response:
+                def raise_for_status(self): pass
+                def json(self):
+                    return {"code":-1,"msg":"blocked"} if "bad" in url else {"symbols":[]}
+            return Response()
+    assert BinanceClient(session=Session(),base_urls=("https://bad","https://ok")).exchange_info()=={"symbols":[]}
