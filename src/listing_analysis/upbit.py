@@ -26,6 +26,9 @@ UPBIT_API_URLS = (
 UPBIT_LIST_PARAM_VARIANTS = (
     {"os": "web", "category": "all"},
     {"os": "web"},
+    # The legacy endpoint requires this selector on some deployments.  Keep it
+    # last so the current endpoint still receives its documented web params.
+    {"os": "web", "thread_name": "general"},
 )
 # api-manager rejects non-browser user agents with HTTP 403.  These are ordinary
 # browser request headers, not authentication or an attempt to evade a rate
@@ -57,6 +60,44 @@ class UpbitClient:
         self.timeout, self.retries, self.request_interval = timeout, retries, request_interval
         self.session = session or requests.Session()
         self._notice_api = UPBIT_API_URLS[0]
+
+    def _snapshot_path(self, page: int) -> Path | None:
+        """Return the stable cache path used across undocumented API changes."""
+        return self.cache_dir / "notice-pages" / f"{page}.json" if self.cache_dir else None
+
+    def _read_snapshot(self, page: int) -> Any | None:
+        path = self._snapshot_path(page)
+        if not path or not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+    def _write_snapshot(self, page: int, payload: Any) -> None:
+        path = self._snapshot_path(page)
+        if not path:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    def _get_notice_detail(self, notice_id: str, refresh: bool) -> Any:
+        path = self.cache_dir / "notice-details" / f"{notice_id}.json" if self.cache_dir else None
+        try:
+            payload = self._get(
+                f"{self._notice_api}/{notice_id}", {"os": "web"}, refresh=refresh
+            )
+            if path:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            return payload
+        except RuntimeError:
+            if path and path.exists():
+                try:
+                    return json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    pass
+            raise
 
     def _get(self, url: str, params: dict | None = None, refresh: bool = False) -> Any:
         key = hashlib.sha256((url + json.dumps(params or {}, sort_keys=True)).encode()).hexdigest()
@@ -106,12 +147,21 @@ class UpbitClient:
                         url, {**variant, "page": page, "per_page": 20}, refresh
                     )
                     self._notice_api = url
+                    self._write_snapshot(page, payload)
                     return payload
                 except RuntimeError as exc:
                     errors.append(str(exc).removeprefix("Upbit request failed: "))
+        # The endpoint is an undocumented web API and may temporarily reject
+        # CI/cloud IPs.  A stable snapshot is deliberately independent of the
+        # endpoint and parameter hash, so an API rename does not turn a useful
+        # report into an empty one.
+        snapshot = self._read_snapshot(page)
+        if snapshot is not None:
+            return snapshot
         raise RuntimeError(
-            "Upbit notice request failed on all endpoint variants: "
-            + "; ".join(dict.fromkeys(errors))
+            "업비트 공지 서버가 요청을 거부했고 사용할 캐시가 없습니다. "
+            "잠시 후 다시 실행하거나 이전 data/cache 디렉터리를 유지해 주세요. "
+            f"(시도 {len(errors)}건)"
         )
 
     def collect(self, as_of: date, lookback_days: int = 365, refresh: bool = False) -> UpbitResult:
@@ -138,11 +188,7 @@ class UpbitClient:
                     # The current announcement detail resource also expects the
                     # web-client selector.  Omitting it can result in a 403 even
                     # after the list request succeeds.
-                    detail = self._get(
-                        f"{self._notice_api}/{notice_id}",
-                        {"os": "web"},
-                        refresh=refresh,
-                    )
+                    detail = self._get_notice_detail(notice_id, refresh)
                     body = detail.get("data", detail)
                     for ticker, changed_at in parse_schedule_change(body, item).items():
                         schedule_changes.setdefault(ticker, changed_at)  # API pages are newest first
