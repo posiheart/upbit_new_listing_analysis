@@ -16,10 +16,17 @@ from bs4 import BeautifulSoup
 
 from .models import UpbitListing
 
-UPBIT_API = "https://api-manager.upbit.com/api/v1/notices"
-# The notice service returns 404 when the web-client discriminator and category
-# are omitted (even though older versions of the endpoint accepted that form).
-UPBIT_LIST_PARAMS = {"os": "web", "category": "all"}
+UPBIT_API_URLS = (
+    # Upbit renamed the web application's resource from notices to
+    # announcements.  Keep the legacy resource as a fallback for old/cached
+    # deployments, since this is an undocumented web API.
+    "https://api-manager.upbit.com/api/v1/announcements",
+    "https://api-manager.upbit.com/api/v1/notices",
+)
+UPBIT_LIST_PARAM_VARIANTS = (
+    {"os": "web", "category": "all"},
+    {"os": "web"},
+)
 USER_AGENT = "upbit-listing-analysis/0.1 (+research; respectful cache)"
 KST = ZoneInfo("Asia/Seoul")
 
@@ -37,6 +44,7 @@ class UpbitClient:
         self.cache_dir = Path(cache_dir) / "upbit" if cache_dir else None
         self.timeout, self.retries, self.request_interval = timeout, retries, request_interval
         self.session = session or requests.Session()
+        self._notice_api = UPBIT_API_URLS[0]
 
     def _get(self, url: str, params: dict | None = None, refresh: bool = False) -> Any:
         key = hashlib.sha256((url + json.dumps(params or {}, sort_keys=True)).encode()).hexdigest()
@@ -47,7 +55,9 @@ class UpbitClient:
         for attempt in range(self.retries + 1):
             try:
                 response = self.session.get(url, params=params, timeout=self.timeout,
-                                            headers={"User-Agent": USER_AGENT})
+                                            headers={"User-Agent": USER_AGENT,
+                                                     "Accept": "application/json",
+                                                     "Referer": "https://upbit.com/"})
                 response.raise_for_status()
                 data = response.json()
                 if path:
@@ -57,9 +67,31 @@ class UpbitClient:
                 return data
             except (requests.RequestException, ValueError) as exc:
                 error = exc
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                # A different URL/parameter variant is needed; retrying the
+                # identical request only makes the report much slower.
+                if status in (400, 403, 404, 410, 451):
+                    break
                 if attempt < self.retries:
                     time.sleep(min(2 ** attempt, 2))
         raise RuntimeError(f"Upbit request failed: {error}")
+
+    def _get_notice_page(self, page: int, refresh: bool) -> Any:
+        errors = []
+        for url in UPBIT_API_URLS:
+            for variant in UPBIT_LIST_PARAM_VARIANTS:
+                try:
+                    payload = self._get(
+                        url, {**variant, "page": page, "per_page": 20}, refresh
+                    )
+                    self._notice_api = url
+                    return payload
+                except RuntimeError as exc:
+                    errors.append(str(exc).removeprefix("Upbit request failed: "))
+        raise RuntimeError(
+            "Upbit notice request failed on all endpoint variants: "
+            + "; ".join(dict.fromkeys(errors))
+        )
 
     def collect(self, as_of: date, lookback_days: int = 365, refresh: bool = False) -> UpbitResult:
         result, page = UpbitResult(), 1
@@ -67,11 +99,7 @@ class UpbitClient:
         cutoff = as_of - timedelta(days=lookback_days)
         while True:
             try:
-                payload = self._get(
-                    UPBIT_API,
-                    {**UPBIT_LIST_PARAMS, "page": page, "per_page": 20},
-                    refresh,
-                )
+                payload = self._get_notice_page(page, refresh)
             except RuntimeError as exc:
                 result.errors.append(str(exc)); break
             notices = _notice_items(payload)
@@ -86,7 +114,7 @@ class UpbitClient:
                 result.notices_examined += 1
                 notice_id = str(item.get("id"))
                 try:
-                    detail = self._get(f"{UPBIT_API}/{notice_id}", refresh=refresh)
+                    detail = self._get(f"{self._notice_api}/{notice_id}", refresh=refresh)
                     body = detail.get("data", detail)
                     for ticker, changed_at in parse_schedule_change(body, item).items():
                         schedule_changes.setdefault(ticker, changed_at)  # API pages are newest first

@@ -12,6 +12,9 @@ from .models import BinanceContract
 # based on the runner's egress route while another official host is usable.
 BASE_URLS = tuple(f"https://fapi{i}.binance.com" for i in range(1, 5)) + (
     "https://fapi.binance.com",
+    # Binance's own website reverse-proxies the same public futures routes and
+    # is useful when every fapi hostname is geo-blocked by an egress provider.
+    "https://www.binance.com",
 )
 
 class BinanceClient:
@@ -25,15 +28,21 @@ class BinanceClient:
             for _ in range(self.retries + 1):
                 try:
                     r=self.session.get(base_url+path, params=params, timeout=self.timeout,
-                        headers={"User-Agent":"upbit-listing-analysis/0.1"})
+                        headers={"User-Agent":"Mozilla/5.0 (compatible; upbit-listing-analysis/0.1)",
+                                 "Accept":"application/json"})
                     r.raise_for_status()
-                    return r.json()
+                    data=r.json()
+                    if not isinstance(data,(dict,list)):
+                        raise ValueError("response was not a JSON object or array")
+                    return data
                 except (requests.RequestException, ValueError) as exc:
                     errors.append(f"{base_url}: {exc}")
                     # Host-specific access failures will not improve on retry.
                     status=getattr(getattr(exc,"response",None),"status_code",None)
-                    if status in (403, 404, 451): break
-        raise RuntimeError("Binance request failed on all official hosts: " + "; ".join(errors))
+                    # HTML in a 200 response is normally a host-level WAF or
+                    # geo-block too, so do not repeat an identical bad request.
+                    if status in (400,403,404,410,418,429,451) or isinstance(exc,ValueError): break
+        raise RuntimeError("Binance request failed on all official hosts: " + "; ".join(dict.fromkeys(errors)))
     def exchange_info(self): return self._get("/fapi/v1/exchangeInfo")
     def klines(self, symbol, start_ms, end_ms):
         return self._get("/fapi/v1/klines", {"symbol":symbol,"interval":"1d","startTime":start_ms,"endTime":end_ms,"limit":1000})

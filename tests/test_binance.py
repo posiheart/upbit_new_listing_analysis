@@ -31,3 +31,18 @@ def test_access_denied_host_falls_back_without_retrying_it():
     result=BinanceClient(retries=2,session=session,base_urls=("https://blocked","https://ok")).exchange_info()
     assert result=={"symbols":[]}
     assert session.urls==["https://blocked/fapi/v1/exchangeInfo","https://ok/fapi/v1/exchangeInfo"]
+
+def test_non_json_waf_response_falls_back_without_retries():
+    class Session:
+        def __init__(self): self.urls=[]
+        def get(self,url,**kwargs):
+            self.urls.append(url)
+            class Response:
+                def raise_for_status(self): pass
+                def json(self):
+                    if "waf" in url: raise requests.JSONDecodeError("bad JSON","<html>",0)
+                    return {"symbols":[]}
+            return Response()
+    session=Session()
+    assert BinanceClient(retries=2,session=session,base_urls=("https://waf","https://ok")).exchange_info()=={"symbols":[]}
+    assert session.urls==["https://waf/fapi/v1/exchangeInfo","https://ok/fapi/v1/exchangeInfo"]
