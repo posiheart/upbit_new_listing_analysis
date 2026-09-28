@@ -105,3 +105,19 @@ def test_current_nested_notice_response_is_normalized():
     notices=[{"id":123}]
     assert _notice_items({"success":True,"data":{"notices":notices}})==notices
     assert _notice_items({"data":notices})==notices
+
+def test_custom_api_base_and_proxy_token_are_used():
+    class Session:
+        def __init__(self): self.call=None
+        def get(self,url,**kwargs):
+            self.call=(url,kwargs)
+            class Response:
+                def raise_for_status(self): pass
+                def json(self): return {"data":[]}
+            return Response()
+    session=Session()
+    UpbitClient(session=session,request_interval=0,
+        api_base_url="https://proxy.example/upbit/api/v1/",
+        proxy_token="secret").collect(datetime(2025,1,1,tzinfo=timezone.utc).date())
+    assert session.call[0]=="https://proxy.example/upbit/api/v1/notices"
+    assert session.call[1]["headers"]["X-Proxy-Token"]=="secret"

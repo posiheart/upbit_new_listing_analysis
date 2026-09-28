@@ -76,3 +76,15 @@ def test_api_error_payload_falls_back_to_next_host():
                     return {"code":-1,"msg":"blocked"} if "bad" in url else {"symbols":[]}
             return Response()
     assert BinanceClient(session=Session(),base_urls=("https://bad","https://ok")).exchange_info()=={"symbols":[]}
+
+def test_proxy_token_header_is_sent():
+    class Session:
+        def get(self,url,**kwargs):
+            assert url=="https://proxy.example/binance/fapi/v1/exchangeInfo"
+            assert kwargs["headers"]["X-Proxy-Token"]=="secret"
+            class Response:
+                def raise_for_status(self): pass
+                def json(self): return {"symbols":[]}
+            return Response()
+    assert BinanceClient(session=Session(),base_urls=("https://proxy.example/binance",),
+        proxy_token="secret").exchange_info()=={"symbols":[]}
