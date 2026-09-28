@@ -73,8 +73,33 @@ def test_collection_falls_back_from_removed_endpoint_and_remembers_detail_url():
     session=Session()
     UpbitClient(session=session,retries=2,request_interval=0).collect(
         datetime(2025,1,1,tzinfo=timezone.utc).date())
-    assert session.urls.count("https://api-manager.upbit.com/api/v1/announcements")==2
+    assert session.urls.count("https://api-manager.upbit.com/api/v1/announcements")==3
     assert session.urls[-1].endswith("/api/v1/notices")
+
+def test_collection_reuses_stable_snapshot_when_all_variants_are_forbidden(tmp_path):
+    snapshot=tmp_path/"upbit"/"notice-pages"/"1.json"
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_text(json.dumps({"data":[]}),encoding="utf-8")
+    class Session:
+        def get(self,url,**kwargs):
+            import requests
+            response=requests.Response(); response.status_code=403; response.url=url
+            return response
+    result=UpbitClient(cache_dir=tmp_path,session=Session(),retries=0,
+        request_interval=0).collect(datetime(2025,1,1,tzinfo=timezone.utc).date())
+    assert result.errors==[]
+
+def test_collection_reports_concise_error_without_leaking_every_failed_url():
+    class Session:
+        def get(self,url,**kwargs):
+            import requests
+            response=requests.Response(); response.status_code=403; response.url=url
+            return response
+    result=UpbitClient(session=Session(),retries=0,request_interval=0).collect(
+        datetime(2025,1,1,tzinfo=timezone.utc).date())
+    assert len(result.errors)==1
+    assert "사용할 캐시가 없습니다" in result.errors[0]
+    assert "https://" not in result.errors[0]
 
 def test_current_nested_notice_response_is_normalized():
     notices=[{"id":123}]
