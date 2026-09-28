@@ -15,7 +15,7 @@ def write_text(path, content):
     destination.write_text(content,encoding="utf-8")
 
 def parser():
-    p=argparse.ArgumentParser(); p.add_argument("--as-of",type=date.fromisoformat); p.add_argument("--lookback-days",type=int,default=365); p.add_argument("--output",default="report.html"); p.add_argument("--cache-dir",default="data/cache"); p.add_argument("--refresh",action="store_true"); p.add_argument("--request-timeout",type=float,default=10); p.add_argument("--symbol-overrides",default="config/symbol_overrides.json"); p.add_argument("--save-json"); return p
+    p=argparse.ArgumentParser(); p.add_argument("--as-of",type=date.fromisoformat); p.add_argument("--lookback-days",type=int,default=365); p.add_argument("--output",default="output/report.html"); p.add_argument("--cache-dir",default="data/cache"); p.add_argument("--refresh",action="store_true"); p.add_argument("--request-timeout",type=float,default=10); p.add_argument("--symbol-overrides",default="config/symbol_overrides.json"); p.add_argument("--save-json"); return p
 def main(argv=None):
     args=parser().parse_args(argv); as_of=args.as_of or datetime.now(timezone.utc).date()
     up=UpbitClient(args.cache_dir,args.request_timeout).collect(as_of,args.lookback_days,args.refresh)

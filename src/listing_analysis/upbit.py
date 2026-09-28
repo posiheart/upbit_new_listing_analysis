@@ -17,6 +17,9 @@ from bs4 import BeautifulSoup
 from .models import UpbitListing
 
 UPBIT_API = "https://api-manager.upbit.com/api/v1/notices"
+# The notice service returns 404 when the web-client discriminator and category
+# are omitted (even though older versions of the endpoint accepted that form).
+UPBIT_LIST_PARAMS = {"os": "web", "category": "all"}
 USER_AGENT = "upbit-listing-analysis/0.1 (+research; respectful cache)"
 KST = ZoneInfo("Asia/Seoul")
 
@@ -64,10 +67,14 @@ class UpbitClient:
         cutoff = as_of - timedelta(days=lookback_days)
         while True:
             try:
-                payload = self._get(UPBIT_API, {"page": page, "per_page": 20}, refresh)
+                payload = self._get(
+                    UPBIT_API,
+                    {**UPBIT_LIST_PARAMS, "page": page, "per_page": 20},
+                    refresh,
+                )
             except RuntimeError as exc:
                 result.errors.append(str(exc)); break
-            notices = payload.get("data", payload if isinstance(payload, list) else [])
+            notices = _notice_items(payload)
             if not notices: break
             stop = False
             for item in notices:
@@ -95,6 +102,22 @@ class UpbitClient:
         unique = {(x.ticker, x.market, x.trading_started_at): x for x in result.listings}
         result.listings = list(unique.values())
         return result
+
+
+def _notice_items(payload: Any) -> list[dict]:
+    """Normalize both the legacy list and current nested notice responses."""
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return []
+    data = payload.get("data", payload)
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for key in ("notices", "list", "items"):
+            if isinstance(data.get(key), list):
+                return data[key]
+    return []
 
 
 def parse_datetime(value: Any) -> datetime | None:

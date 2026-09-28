@@ -1,4 +1,5 @@
-from listing_analysis.binance import contracts_from_exchange_info,map_contract
+import requests
+from listing_analysis.binance import BinanceClient,contracts_from_exchange_info,map_contract
 
 def contracts():
     return contracts_from_exchange_info({"symbols":[
@@ -12,3 +13,21 @@ def test_missing_and_override_exclusion():
     assert map_contract("NONE",contracts())[1]=="NO_BINANCE_CONTRACT"
     assert map_contract("ABC",contracts(),{"ABC":{"binance_symbol":None}})[1]=="NO_BINANCE_CONTRACT"
 
+def test_access_denied_host_falls_back_without_retrying_it():
+    class Session:
+        def __init__(self): self.urls=[]
+        def get(self,url,**kwargs):
+            self.urls.append(url)
+            class Response:
+                status_code=451 if "blocked" in url else 200
+                def raise_for_status(self):
+                    if self.status_code != 200:
+                        error=requests.HTTPError("451 Client Error")
+                        error.response=self
+                        raise error
+                def json(self): return {"symbols":[]}
+            return Response()
+    session=Session()
+    result=BinanceClient(retries=2,session=session,base_urls=("https://blocked","https://ok")).exchange_info()
+    assert result=={"symbols":[]}
+    assert session.urls==["https://blocked/fapi/v1/exchangeInfo","https://ok/fapi/v1/exchangeInfo"]
