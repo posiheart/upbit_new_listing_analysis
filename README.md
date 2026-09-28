@@ -14,7 +14,23 @@ listing-analysis --as-of 2025-12-31 --lookback-days 365 \
 
 `--refresh`는 Upbit 캐시보다 네트워크 갱신을 우선하되, 일시적인 API/WAF 오류가 발생하면 마지막 정상 캐시를 사용합니다. 공지 목록의 마지막 정상 응답은 엔드포인트별 캐시와 별도로 보존하므로 Upbit가 비공개 API 경로나 파라미터를 바꾸거나 CI IP를 HTTP 403으로 차단해도 기존 분석 결과가 빈 보고서로 바뀌지 않습니다. 따라서 Actions 캐시인 `data/cache`를 삭제하지 않는 것이 중요합니다. Binance의 정상 응답(거래소 정보와 일봉)도 같은 디렉터리에 저장되어 다음 실행에서 재사용됩니다. `--request-timeout`으로 HTTP 제한 시간을 설정합니다. `--as-of`는 UTC 날짜이고, 생략하면 실행 시점의 UTC 날짜입니다. `--output`을 생략하면 `output/report.html`에 생성됩니다. HTML은 CSS, SVG, 검색/필터/정렬용 표준 JavaScript까지 내장한 단일 파일입니다. 일부 API 또는 가격 수집 실패도 경고와 결측 상태로 남기고 보고서는 계속 생성합니다. Upbit의 비공개 웹 공지 API 변경에 대비해 `notices`에는 `thread_name=general`, `announcements`에는 `category=all`이라는 각 경로에 맞는 파라미터를 사용합니다. Binance USDⓈ-M은 지역 제한(HTTP 451), WAF의 HTML 응답 등에 대비해 공식 기본 `fapi`와 `fapi1`~`fapi4` 호스트를 순서대로 대체 사용합니다. HTTP 451은 주소가 틀렸다는 뜻이 아니라 Binance가 실행 위치의 접속을 제한한 응답이므로, 이 경우 접속 가능한 네트워크에서 한 번 실행해 생성한 `data/cache`를 보존해야 합니다.
 
-GitHub 호스팅 러너의 공용 IP가 거래소에서 차단되는 저장소는 접근 가능한 지역에 HTTPS 역방향 프록시를 두고 `UPBIT_API_BASE_URL`(예: `https://proxy.example/upbit/api/v1`)과 `BINANCE_API_BASE_URLS`(쉼표로 구분한 Binance 루트 URL)를 설정할 수 있습니다. 선택적으로 `API_PROXY_TOKEN`을 설정하면 모든 프록시 요청에 `X-Proxy-Token` 헤더로 전달됩니다. 토큰과 URL은 명령줄 대신 환경 변수 또는 GitHub **Actions secrets**에 저장해 로그에 노출하지 마십시오. 프록시는 요청 경로와 쿼리를 그대로 원본으로 전달해야 합니다. 즉 Upbit 루트 뒤의 `/notices`, `/announcements`와 Binance 루트 뒤의 `/fapi/v1/exchangeInfo`, `/fapi/v1/klines`를 지원해야 합니다.
+GitHub 호스팅 러너의 공용 IP가 거래소에서 차단되는 저장소는 접근 가능한 지역에 HTTPS 역방향 프록시를 두고 `UPBIT_API_BASE_URL`(예: `https://proxy.example/upbit/api/v1`)과 `BINANCE_API_BASE_URLS`(쉼표로 구분한 Binance 루트 URL)를 설정할 수 있습니다. 선택적으로 `API_PROXY_TOKEN`을 설정하면 모든 프록시 요청에 `X-Proxy-Token` 헤더로 전달됩니다. 토큰과 URL은 명령줄 대신 환경 변수 또는 GitHub **Actions secrets**에 저장해 로그에 노출하지 마십시오. 프록시는 요청 경로와 쿼리를 그대로 원본으로 전달해야 합니다. 즉 Upbit 루트 뒤의 `/notices`, `/announcements`와 Binance 루트 뒤의 `/fapi/v1/exchangeInfo`, `/fapi/v1/klines`를 지원해야 합니다. 공개 프록시나 User-Agent 위장은 안정적이거나 안전한 IP 제한 우회책이 아니므로 사용하지 않습니다.
+
+저장소에는 인증과 경로 allowlist를 포함한 최소 Cloudflare Worker 예제가 `infra/exchange-proxy/`에 있습니다. 거래소 이용약관과 해당 지역의 법률상 접근이 허용되는 위치에서만 다음처럼 배포하십시오.
+
+```bash
+cd infra/exchange-proxy
+npx wrangler secret put PROXY_TOKEN
+npx wrangler deploy
+```
+
+배포 URL이 `https://listing-proxy.example.workers.dev`라면 Actions secret을 다음과 같이 설정합니다.
+
+* `UPBIT_API_BASE_URL=https://listing-proxy.example.workers.dev/upbit/api/v1`
+* `BINANCE_API_BASE_URLS=https://listing-proxy.example.workers.dev/binance`
+* `API_PROXY_TOKEN`: `wrangler secret put`에 입력한 값
+
+Worker 배포 위치에서도 거래소가 접속을 허용하지 않는다면, 허용된 네트워크에 self-hosted runner를 설치하고 repository variable `COLLECTION_RUNNER`를 그 runner label(예: `self-hosted`)로 설정하십시오. Pages 파일 자체는 정적이며 데이터 수집은 배포 작업이 실행되는 runner에서만 수행됩니다.
 
 런타임 외부 의존성은 HTTP용 **requests**, HTML 파싱용 **beautifulsoup4** 두 개뿐입니다. pandas, numpy, matplotlib, plotly, selenium은 사용하지 않습니다. pytest는 `[project.optional-dependencies].dev`에만 분리되어 있으며 `pip install -e '.[dev]'`로 설치합니다.
 
@@ -62,7 +78,7 @@ pytest
 
 최초 한 번 저장소의 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 선택하십시오. 이후 Actions 실행의 `deploy` 작업에 표시되는 URL 또는 `https://<계정>.github.io/<저장소>/`에서 보고서를 볼 수 있습니다. 공개되는 `index.html`은 외부 CSS/JavaScript 없이 요약, 기간별 수익률 차트, 검색·상태 필터·열 정렬이 가능한 상세표를 모두 포함합니다.
 
-워크플로는 테스트와 데이터 수집이 성공한 경우에만 배포하며, 정상 응답 캐시는 실행 사이에 재사용합니다. GitHub Pages는 정적 호스팅이므로 브라우저에서 거래소 API를 직접 호출하지 않고 Actions가 만든 HTML만 제공합니다. 수집이 실패하면 `--fail-on-collection-error`가 작업을 실패시켜 이미 배포된 정상 페이지를 빈 경고 페이지로 덮어쓰지 않습니다.
+워크플로는 테스트와 데이터 수집이 성공한 경우에만 배포하며, 정상 응답 캐시는 실행 사이에 재사용합니다. GitHub Pages는 정적 호스팅이므로 브라우저에서 거래소 API를 직접 호출하지 않고 Actions가 만든 HTML만 제공합니다. 수집이 실패하면 `--fail-on-collection-error`가 출력 파일을 쓰기 **전에** 작업을 실패시켜 이미 배포된 정상 페이지와 로컬의 마지막 정상 파일을 빈 경고 페이지로 덮어쓰지 않습니다.
 
 GitHub 호스팅 IP가 차단되는 경우 저장소 **Settings → Secrets and variables → Actions**에 다음 repository secret을 추가하십시오.
 
