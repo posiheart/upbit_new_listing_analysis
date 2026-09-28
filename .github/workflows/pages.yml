@@ -31,7 +31,9 @@ jobs:
 
   deploy:
     needs: test
-    runs-on: ubuntu-latest
+    # Set the COLLECTION_RUNNER repository variable to a self-hosted runner
+    # label when exchange APIs reject GitHub's shared egress IPs.
+    runs-on: ${{ vars.COLLECTION_RUNNER || 'ubuntu-latest' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

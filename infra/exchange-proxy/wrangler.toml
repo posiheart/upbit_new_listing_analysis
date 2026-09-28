@@ -1,0 +1,8 @@
+name = "listing-analysis-exchange-proxy"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Ask Cloudflare to execute near the upstream when possible rather than near
+# the GitHub runner. Availability is still governed by each exchange's terms.
+[placement]
+mode = "smart"

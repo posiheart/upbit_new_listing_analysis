@@ -33,9 +33,14 @@ def main(argv=None):
     except RuntimeError as exc: contracts=[]; warnings.append(str(exc))
     overrides=load_overrides(args.symbol_overrides)
     analyses=analyze_all(up.listings,contracts,bc,as_of,lambda t,cs:map_contract(t,cs,overrides))
+    analysis_errors=sorted({a.warning for a in analyses if a.warning})
+    collection_errors=warnings+analysis_errors
+    # Validate the whole collection before touching either output.  This is
+    # important for local runs as well as Pages: the option promises to retain
+    # the last successful report, not merely to prevent a failed deployment.
+    if args.fail_on_collection_error and collection_errors:
+        raise SystemExit("collection failed; refusing to replace the last successful report: " + "; ".join(collection_errors))
     write_text(args.output,render_report(analyses,as_of,up.notices_examined,warnings))
     if args.save_json: write_text(args.save_json,json.dumps(json_value(analyses),ensure_ascii=False,indent=2))
-    if args.fail_on_collection_error and warnings:
-        raise SystemExit("collection failed; refusing to replace the last successful report: " + "; ".join(warnings))
 
 if __name__=="__main__": main()
