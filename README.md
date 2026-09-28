@@ -12,7 +12,7 @@ listing-analysis --as-of 2025-12-31 --lookback-days 365 \
   --symbol-overrides config/symbol_overrides.json --save-json analysis.json
 ```
 
-`--refresh`는 Upbit 캐시를 무시하며 `--request-timeout`으로 HTTP 제한 시간을 설정합니다. `--as-of`는 UTC 날짜이고, 생략하면 실행 시점의 UTC 날짜입니다. `--output`을 생략하면 `output/report.html`에 생성됩니다. HTML은 CSS, SVG, 검색/필터/정렬용 표준 JavaScript까지 내장한 단일 파일입니다. 일부 API 또는 가격 수집 실패도 경고와 결측 상태로 남기고 보고서는 계속 생성합니다. Upbit 공지 요청에는 현재 웹 API가 요구하는 `os=web`, `category=all`을 포함하고, Binance USDⓈ-M은 기본 호스트의 지역 제한(HTTP 451 등)에 대비해 공식 `fapi1`~`fapi4` 호스트를 순서대로 대체 사용합니다.
+`--refresh`는 Upbit 캐시를 무시하며 `--request-timeout`으로 HTTP 제한 시간을 설정합니다. `--as-of`는 UTC 날짜이고, 생략하면 실행 시점의 UTC 날짜입니다. `--output`을 생략하면 `output/report.html`에 생성됩니다. HTML은 CSS, SVG, 검색/필터/정렬용 표준 JavaScript까지 내장한 단일 파일입니다. 일부 API 또는 가격 수집 실패도 경고와 결측 상태로 남기고 보고서는 계속 생성합니다. Upbit의 비공개 웹 공지 API 변경에 대비해 `announcements`/`notices` 경로와 파라미터 조합을 순차적으로 사용합니다. Binance USDⓈ-M은 지역 제한(HTTP 451), WAF의 HTML 응답 등에 대비해 공식 `fapi1`~`fapi4`, 기본 `fapi`, `www.binance.com` 프록시를 순서대로 대체 사용합니다.
 
 런타임 외부 의존성은 HTTP용 **requests**, HTML 파싱용 **beautifulsoup4** 두 개뿐입니다. pandas, numpy, matplotlib, plotly, selenium은 사용하지 않습니다. pytest는 `[project.optional-dependencies].dev`에만 분리되어 있으며 `pip install -e '.[dev]'`로 설치합니다.
 
