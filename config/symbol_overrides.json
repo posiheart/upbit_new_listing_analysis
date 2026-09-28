@@ -1,0 +1,5 @@
+{
+  "overrides": [
+    {"upbit_ticker": "PEPE", "binance_symbol": "1000PEPEUSDT", "contract_multiplier": "1000", "reason": "Binance lists the 1000-token multiplier contract"}
+  ]
+}
