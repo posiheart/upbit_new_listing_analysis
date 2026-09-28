@@ -19,7 +19,7 @@ def parser():
 def main(argv=None):
     args=parser().parse_args(argv); as_of=args.as_of or datetime.now(timezone.utc).date()
     up=UpbitClient(args.cache_dir,args.request_timeout).collect(as_of,args.lookback_days,args.refresh)
-    bc=BinanceClient(args.request_timeout); warnings=list(up.errors)
+    bc=BinanceClient(args.request_timeout,cache_dir=args.cache_dir); warnings=list(up.errors)
     try: contracts=contracts_from_exchange_info(bc.exchange_info())
     except RuntimeError as exc: contracts=[]; warnings.append(str(exc))
     overrides=load_overrides(args.symbol_overrides)

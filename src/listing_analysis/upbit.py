@@ -16,20 +16,17 @@ from bs4 import BeautifulSoup
 
 from .models import UpbitListing
 
-UPBIT_API_URLS = (
-    # Upbit renamed the web application's resource from notices to
-    # announcements.  Keep the legacy resource as a fallback for old/cached
-    # deployments, since this is an undocumented web API.
-    "https://api-manager.upbit.com/api/v1/announcements",
-    "https://api-manager.upbit.com/api/v1/notices",
+# This is a web endpoint used by upbit.com, rather than part of the documented
+# Open API.  Keep the URL and its matching parameters together: sending the
+# ``category`` parameters to ``notices`` (or ``thread_name`` to
+# ``announcements``) makes a valid endpoint look broken.
+UPBIT_NOTICE_ENDPOINTS = (
+    ("https://api-manager.upbit.com/api/v1/notices",
+     {"os": "web", "thread_name": "general"}),
+    ("https://api-manager.upbit.com/api/v1/announcements",
+     {"os": "web", "category": "all"}),
 )
-UPBIT_LIST_PARAM_VARIANTS = (
-    {"os": "web", "category": "all"},
-    {"os": "web"},
-    # The legacy endpoint requires this selector on some deployments.  Keep it
-    # last so the current endpoint still receives its documented web params.
-    {"os": "web", "thread_name": "general"},
-)
+UPBIT_API_URLS = tuple(url for url, _ in UPBIT_NOTICE_ENDPOINTS)
 # api-manager rejects non-browser user agents with HTTP 403.  These are ordinary
 # browser request headers, not authentication or an attempt to evade a rate
 # limit; the deliberately low request rate and on-disk cache remain in place.
@@ -140,17 +137,18 @@ class UpbitClient:
 
     def _get_notice_page(self, page: int, refresh: bool) -> Any:
         errors = []
-        for url in UPBIT_API_URLS:
-            for variant in UPBIT_LIST_PARAM_VARIANTS:
-                try:
-                    payload = self._get(
-                        url, {**variant, "page": page, "per_page": 20}, refresh
-                    )
-                    self._notice_api = url
-                    self._write_snapshot(page, payload)
-                    return payload
-                except RuntimeError as exc:
-                    errors.append(str(exc).removeprefix("Upbit request failed: "))
+        for url, parameters in UPBIT_NOTICE_ENDPOINTS:
+            try:
+                payload = self._get(
+                    url, {**parameters, "page": page, "per_page": 20}, refresh
+                )
+                if not isinstance(payload, (dict, list)):
+                    raise RuntimeError("Upbit request failed: invalid JSON response shape")
+                self._notice_api = url
+                self._write_snapshot(page, payload)
+                return payload
+            except RuntimeError as exc:
+                errors.append(str(exc).removeprefix("Upbit request failed: "))
         # The endpoint is an undocumented web API and may temporarily reject
         # CI/cloud IPs.  A stable snapshot is deliberately independent of the
         # endpoint and parameter hash, so an API rename does not turn a useful

@@ -19,7 +19,7 @@ def test_changed_start_uses_last_explicit_time():
     d={"id":2,"created_at":"2025-01-01T00:00:00Z","title":"X 거래지원 추가", "content":"KRW-X 거래지원 시작 2025-01-02 10:00 변경: 2025-01-02 12:30"}
     assert parse_notice(d)[0].trading_started_at.hour==3
 
-def test_collection_uses_current_announcement_endpoint_and_parameters():
+def test_collection_uses_notice_endpoint_with_its_required_parameters():
     class Session:
         def __init__(self): self.calls=[]
         def get(self,url,**kwargs):
@@ -30,8 +30,8 @@ def test_collection_uses_current_announcement_endpoint_and_parameters():
             return Response()
     session=Session()
     UpbitClient(session=session,request_interval=0).collect(datetime(2025,1,1,tzinfo=timezone.utc).date())
-    assert session.calls[0][0].endswith("/api/v1/announcements")
-    assert session.calls[0][1]=={"os":"web","category":"all","page":1,"per_page":20}
+    assert session.calls[0][0].endswith("/api/v1/notices")
+    assert session.calls[0][1]=={"os":"web","thread_name":"general","page":1,"per_page":20}
     assert UPBIT_HEADERS["Origin"]=="https://upbit.com"
     assert "Mozilla/5.0" in UPBIT_HEADERS["User-Agent"]
 
@@ -56,13 +56,13 @@ def test_collection_supplies_web_selector_to_notice_detail():
     assert [row.ticker for row in result.listings]==["X"]
     assert session.calls[1][1]=={"os":"web"}
 
-def test_collection_falls_back_from_removed_endpoint_and_remembers_detail_url():
+def test_collection_falls_back_to_announcements_and_remembers_detail_url():
     class Session:
         def __init__(self): self.urls=[]
         def get(self,url,**kwargs):
             self.urls.append(url)
             class Response:
-                status_code=404 if "announcements" in url else 200
+                status_code=404 if "notices" in url else 200
                 def raise_for_status(self):
                     if self.status_code == 404:
                         import requests
@@ -73,8 +73,8 @@ def test_collection_falls_back_from_removed_endpoint_and_remembers_detail_url():
     session=Session()
     UpbitClient(session=session,retries=2,request_interval=0).collect(
         datetime(2025,1,1,tzinfo=timezone.utc).date())
-    assert session.urls.count("https://api-manager.upbit.com/api/v1/announcements")==3
-    assert session.urls[-1].endswith("/api/v1/notices")
+    assert session.urls.count("https://api-manager.upbit.com/api/v1/notices")==1
+    assert session.urls[-1].endswith("/api/v1/announcements")
 
 def test_collection_reuses_stable_snapshot_when_all_variants_are_forbidden(tmp_path):
     snapshot=tmp_path/"upbit"/"notice-pages"/"1.json"
