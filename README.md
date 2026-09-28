@@ -49,3 +49,24 @@ listing-analysis --as-of 2025-12-31 --lookback-days 365 \
 pip install -e '.[dev]'
 pytest
 ```
+
+## GitHub Actions와 GitHub Pages
+
+`.github/workflows/pages.yml`은 다음 상황에 테스트를 실행한 뒤 최신 단일 HTML 보고서를 빌드하고 GitHub Pages에 배포합니다.
+
+* `main` 또는 `master` 브랜치에 push할 때
+* 매일 00:30 UTC(09:30 KST)에 예약 실행할 때
+* Actions 화면에서 **Build and deploy report**를 수동 실행할 때
+
+최초 한 번 저장소의 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 선택하십시오. 이후 Actions 실행의 `deploy` 작업에 표시되는 URL 또는 `https://<계정>.github.io/<저장소>/`에서 보고서를 볼 수 있습니다. 공개되는 `index.html`은 외부 CSS/JavaScript 없이 요약, 기간별 수익률 차트, 검색·상태 필터·열 정렬이 가능한 상세표를 모두 포함합니다.
+
+워크플로는 테스트가 성공한 경우에만 배포하며, Upbit 응답 캐시는 실행 사이에 재사용합니다. 수동으로 같은 배포 파일을 확인하려면 다음을 실행하십시오.
+
+```bash
+pip install -e .
+listing-analysis --output public/index.html --cache-dir data/cache \
+  --symbol-overrides config/symbol_overrides.json --request-timeout 30
+python -m http.server 8000 --directory public
+```
+
+그런 다음 브라우저에서 `http://localhost:8000/`을 여십시오. `--as-of`를 지정하지 않은 Pages 빌드는 실행 시점의 UTC 날짜를 기준일로 사용합니다.

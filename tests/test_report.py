@@ -3,6 +3,7 @@ from decimal import Decimal
 from listing_analysis.analysis import analyze_listing
 from test_analysis import listing,contract,candle
 from listing_analysis.report import render_report,summary
+from listing_analysis.cli import write_text
 
 def test_escape_and_missing_excluded_from_denominator():
     bad=listing(); object.__setattr__(bad,"notice_id","<script>alert(1)</script>")
@@ -11,3 +12,7 @@ def test_escape_and_missing_excluded_from_denominator():
     assert "<script>alert(1)</script>" not in html and "&lt;script&gt;" in html and "&lt;b&gt;bad&lt;/b&gt;" in html
     stats,_=summary([a]); assert stats[7]["count"]==1 and stats[30]["count"]==0
 
+def test_write_text_creates_pages_output_directory(tmp_path):
+    output=tmp_path/"public"/"index.html"
+    write_text(output,"<html lang='ko'></html>")
+    assert output.read_text(encoding="utf-8")=="<html lang='ko'></html>"
