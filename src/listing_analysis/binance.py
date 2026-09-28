@@ -10,12 +10,16 @@ from .models import BinanceContract
 # Binance documents these numbered USD-M REST hosts as alternatives to the
 # primary host.  In particular, a CDN can return HTTP 451 for one hostname
 # based on the runner's egress route while another official host is usable.
-BASE_URLS = tuple(f"https://fapi{i}.binance.com" for i in range(1, 5)) + (
-    "https://fapi.binance.com",
-    # Binance's own website reverse-proxies the same public futures routes and
-    # is useful when every fapi hostname is geo-blocked by an egress provider.
-    "https://www.binance.com",
+BASE_URLS = ("https://fapi.binance.com",) + tuple(
+    f"https://fapi{i}.binance.com" for i in range(1, 5)
 )
+BINANCE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+}
 
 class BinanceClient:
     def __init__(self, timeout=10, retries=2, session=None, base_urls=None):
@@ -28,8 +32,7 @@ class BinanceClient:
             for _ in range(self.retries + 1):
                 try:
                     r=self.session.get(base_url+path, params=params, timeout=self.timeout,
-                        headers={"User-Agent":"Mozilla/5.0 (compatible; upbit-listing-analysis/0.1)",
-                                 "Accept":"application/json"})
+                        headers=BINANCE_HEADERS)
                     r.raise_for_status()
                     data=r.json()
                     if not isinstance(data,(dict,list)):

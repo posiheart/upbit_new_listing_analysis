@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from listing_analysis.upbit import UpbitClient, _notice_items, parse_notice
+from listing_analysis.upbit import UPBIT_HEADERS, UpbitClient, _notice_items, parse_notice
 
 def test_multi_asset_and_kst_conversion():
     data=json.loads(Path("tests/fixtures/upbit_multi.json").read_text())
@@ -32,6 +32,29 @@ def test_collection_uses_current_announcement_endpoint_and_parameters():
     UpbitClient(session=session,request_interval=0).collect(datetime(2025,1,1,tzinfo=timezone.utc).date())
     assert session.calls[0][0].endswith("/api/v1/announcements")
     assert session.calls[0][1]=={"os":"web","category":"all","page":1,"per_page":20}
+    assert UPBIT_HEADERS["Origin"]=="https://upbit.com"
+    assert "Mozilla/5.0" in UPBIT_HEADERS["User-Agent"]
+
+def test_collection_supplies_web_selector_to_notice_detail():
+    class Session:
+        def __init__(self): self.calls=[]
+        def get(self,url,**kwargs):
+            self.calls.append((url,kwargs.get("params")))
+            class Response:
+                def raise_for_status(self): pass
+                def json(inner_self):
+                    if url.endswith("/321"):
+                        return {"data":{"id":321,"created_at":"2025-01-01T00:00:00Z",
+                            "title":"거래지원 추가","content":"KRW-X 거래지원 시작 2025-01-02 10:00"}}
+                    if len(self.calls)==1:
+                        return {"data":[{"id":321,"created_at":"2025-01-01T00:00:00Z"}]}
+                    return {"data":[]}
+            return Response()
+    session=Session()
+    result=UpbitClient(session=session,request_interval=0).collect(
+        datetime(2025,1,3,tzinfo=timezone.utc).date(),lookback_days=10)
+    assert [row.ticker for row in result.listings]==["X"]
+    assert session.calls[1][1]=={"os":"web"}
 
 def test_collection_falls_back_from_removed_endpoint_and_remembers_detail_url():
     class Session:
