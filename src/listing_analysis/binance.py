@@ -22,11 +22,13 @@ BINANCE_HEADERS = {
 }
 
 class BinanceClient:
-    def __init__(self, timeout=10, retries=2, session=None, base_urls=None, cache_dir=None):
+    def __init__(self, timeout=10, retries=2, session=None, base_urls=None, cache_dir=None,
+                 proxy_token=None):
         self.timeout, self.retries = timeout, retries
         self.session = session or requests.Session()
         self.base_urls = tuple(base_urls or BASE_URLS)
         self.cache_dir = Path(cache_dir) / "binance" if cache_dir else None
+        self.proxy_token = proxy_token
     def _get(self, path, params=None):
         key=json.dumps({"path":path,"params":params or {}},sort_keys=True,separators=(",",":"))
         cache_path=(self.cache_dir / (hashlib.sha256(key.encode()).hexdigest()+".json")) if self.cache_dir else None
@@ -37,8 +39,10 @@ class BinanceClient:
         for base_url in self.base_urls:
             for _ in range(self.retries + 1):
                 try:
+                    headers=dict(BINANCE_HEADERS)
+                    if self.proxy_token: headers["X-Proxy-Token"]=self.proxy_token
                     r=self.session.get(base_url+path, params=params, timeout=self.timeout,
-                        headers=BINANCE_HEADERS)
+                        headers=headers)
                     r.raise_for_status()
                     data=r.json()
                     if not isinstance(data,(dict,list)):

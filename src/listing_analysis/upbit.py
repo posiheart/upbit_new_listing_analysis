@@ -52,11 +52,21 @@ class UpbitResult:
 
 class UpbitClient:
     def __init__(self, cache_dir: str | Path | None = None, timeout: float = 10,
-                 retries: int = 2, request_interval: float = .25, session=None):
+                 retries: int = 2, request_interval: float = .25, session=None,
+                 api_base_url: str | None = None, proxy_token: str | None = None):
         self.cache_dir = Path(cache_dir) / "upbit" if cache_dir else None
         self.timeout, self.retries, self.request_interval = timeout, retries, request_interval
         self.session = session or requests.Session()
-        self._notice_api = UPBIT_API_URLS[0]
+        self.proxy_token = proxy_token
+        if api_base_url:
+            root = api_base_url.rstrip("/")
+            self.notice_endpoints = (
+                (f"{root}/notices", {"os": "web", "thread_name": "general"}),
+                (f"{root}/announcements", {"os": "web", "category": "all"}),
+            )
+        else:
+            self.notice_endpoints = UPBIT_NOTICE_ENDPOINTS
+        self._notice_api = self.notice_endpoints[0][0]
 
     def _snapshot_path(self, page: int) -> Path | None:
         """Return the stable cache path used across undocumented API changes."""
@@ -104,11 +114,14 @@ class UpbitClient:
         error = None
         for attempt in range(self.retries + 1):
             try:
+                headers = dict(UPBIT_HEADERS)
+                if self.proxy_token:
+                    headers["X-Proxy-Token"] = self.proxy_token
                 response = self.session.get(
                     url,
                     params=params,
                     timeout=self.timeout,
-                    headers=UPBIT_HEADERS,
+                    headers=headers,
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -137,7 +150,7 @@ class UpbitClient:
 
     def _get_notice_page(self, page: int, refresh: bool) -> Any:
         errors = []
-        for url, parameters in UPBIT_NOTICE_ENDPOINTS:
+        for url, parameters in self.notice_endpoints:
             try:
                 payload = self._get(
                     url, {**parameters, "page": page, "per_page": 20}, refresh

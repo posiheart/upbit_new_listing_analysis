@@ -49,7 +49,16 @@ jobs:
           key: upbit-cache-${{ runner.os }}-${{ github.run_id }}
           restore-keys: upbit-cache-${{ runner.os }}-
       - name: Build the self-contained report
-        run: listing-analysis --output public/index.html --cache-dir data/cache --symbol-overrides config/symbol_overrides.json --request-timeout 30
+        env:
+          # Optional repository secrets. Point these at an HTTPS reverse proxy
+          # in a region where the exchange APIs are available.
+          UPBIT_API_BASE_URL: ${{ secrets.UPBIT_API_BASE_URL }}
+          BINANCE_API_BASE_URLS: ${{ secrets.BINANCE_API_BASE_URLS }}
+          API_PROXY_TOKEN: ${{ secrets.API_PROXY_TOKEN }}
+        run: >-
+          listing-analysis --output public/index.html --cache-dir data/cache
+          --symbol-overrides config/symbol_overrides.json --request-timeout 30
+          --fail-on-collection-error
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
