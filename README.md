@@ -78,7 +78,7 @@ pytest
 
 최초 한 번 저장소의 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 선택하십시오. 이후 Actions 실행의 `deploy` 작업에 표시되는 URL 또는 `https://<계정>.github.io/<저장소>/`에서 보고서를 볼 수 있습니다. 공개되는 `index.html`은 외부 CSS/JavaScript 없이 요약, 기간별 수익률 차트, 검색·상태 필터·열 정렬이 가능한 상세표를 모두 포함합니다.
 
-워크플로는 테스트와 데이터 수집이 성공한 경우에만 배포하며, 정상 응답 캐시는 실행 사이에 재사용합니다. GitHub Pages는 정적 호스팅이므로 브라우저에서 거래소 API를 직접 호출하지 않고 Actions가 만든 HTML만 제공합니다. 수집이 실패하면 `--fail-on-collection-error`가 출력 파일을 쓰기 **전에** 작업을 실패시켜 이미 배포된 정상 페이지와 로컬의 마지막 정상 파일을 빈 경고 페이지로 덮어쓰지 않습니다.
+워크플로는 정상 응답 캐시를 실행 사이에 재사용합니다. GitHub Pages는 정적 호스팅이므로 브라우저에서 거래소 API를 직접 호출하지 않고 Actions가 만든 HTML만 제공합니다. `--fail-on-collection-error`는 수집 오류가 발생하면 출력 파일을 쓰기 **전에** 종료하므로 빈 경고 페이지를 만들지 않습니다. 이 명령 자체가 실패하더라도 Pages 배포 작업은 저장소에 포함된 마지막 정상 보고서인 `output/report.html`을 `public/index.html`로 복사해 배포합니다. 따라서 캐시가 없는 최초 실행에서 GitHub 호스팅 러너의 IP가 Upbit와 Binance 양쪽에서 거부되어도 워크플로 전체가 실패하거나 기존 보고서가 빈 페이지로 교체되지 않습니다. 이 경우 Actions 로그에는 fallback 사용 경고가 표시되며, 최신 데이터로 갱신하려면 아래 프록시 또는 self-hosted runner 설정이 필요합니다.
 
 GitHub 호스팅 IP가 차단되는 경우 저장소 **Settings → Secrets and variables → Actions**에 다음 repository secret을 추가하십시오.
 
