@@ -8,6 +8,12 @@ from .models import json_value
 from .report import render_report
 from .upbit import UpbitClient
 
+def write_text(path, content):
+    """Write an output file, creating its destination directory when needed."""
+    destination=Path(path)
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    destination.write_text(content,encoding="utf-8")
+
 def parser():
     p=argparse.ArgumentParser(); p.add_argument("--as-of",type=date.fromisoformat); p.add_argument("--lookback-days",type=int,default=365); p.add_argument("--output",default="report.html"); p.add_argument("--cache-dir",default="data/cache"); p.add_argument("--refresh",action="store_true"); p.add_argument("--request-timeout",type=float,default=10); p.add_argument("--symbol-overrides",default="config/symbol_overrides.json"); p.add_argument("--save-json"); return p
 def main(argv=None):
@@ -18,8 +24,7 @@ def main(argv=None):
     except RuntimeError as exc: contracts=[]; warnings.append(str(exc))
     overrides=load_overrides(args.symbol_overrides)
     analyses=analyze_all(up.listings,contracts,bc,as_of,lambda t,cs:map_contract(t,cs,overrides))
-    Path(args.output).write_text(render_report(analyses,as_of,up.notices_examined,warnings),encoding="utf-8")
-    if args.save_json: Path(args.save_json).write_text(json.dumps(json_value(analyses),ensure_ascii=False,indent=2),encoding="utf-8")
+    write_text(args.output,render_report(analyses,as_of,up.notices_examined,warnings))
+    if args.save_json: write_text(args.save_json,json.dumps(json_value(analyses),ensure_ascii=False,indent=2))
 
 if __name__=="__main__": main()
-

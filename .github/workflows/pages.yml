@@ -1,0 +1,59 @@
+name: Build and deploy report
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 매일 00:30 UTC (09:30 KST)에 최신 보고서를 다시 만듭니다.
+    - cron: "30 0 * * *"
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - run: pytest
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: Restore Upbit response cache
+        uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: upbit-cache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: upbit-cache-${{ runner.os }}-
+      - name: Build the self-contained report
+        run: listing-analysis --output public/index.html --cache-dir data/cache --symbol-overrides config/symbol_overrides.json --request-timeout 30
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
