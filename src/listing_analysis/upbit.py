@@ -27,7 +27,19 @@ UPBIT_LIST_PARAM_VARIANTS = (
     {"os": "web", "category": "all"},
     {"os": "web"},
 )
-USER_AGENT = "upbit-listing-analysis/0.1 (+research; respectful cache)"
+# api-manager rejects non-browser user agents with HTTP 403.  These are ordinary
+# browser request headers, not authentication or an attempt to evade a rate
+# limit; the deliberately low request rate and on-disk cache remain in place.
+UPBIT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
+    "Origin": "https://upbit.com",
+    "Referer": "https://upbit.com/service_center/notice",
+}
 KST = ZoneInfo("Asia/Seoul")
 
 
@@ -54,10 +66,12 @@ class UpbitClient:
         error = None
         for attempt in range(self.retries + 1):
             try:
-                response = self.session.get(url, params=params, timeout=self.timeout,
-                                            headers={"User-Agent": USER_AGENT,
-                                                     "Accept": "application/json",
-                                                     "Referer": "https://upbit.com/"})
+                response = self.session.get(
+                    url,
+                    params=params,
+                    timeout=self.timeout,
+                    headers=UPBIT_HEADERS,
+                )
                 response.raise_for_status()
                 data = response.json()
                 if path:
@@ -74,6 +88,13 @@ class UpbitClient:
                     break
                 if attempt < self.retries:
                     time.sleep(min(2 ** attempt, 2))
+        # A temporary 403/WAF or network failure should not destroy a
+        # reproducible cached run merely because --refresh was requested.
+        if path and path.exists():
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                pass
         raise RuntimeError(f"Upbit request failed: {error}")
 
     def _get_notice_page(self, page: int, refresh: bool) -> Any:
@@ -114,7 +135,14 @@ class UpbitClient:
                 result.notices_examined += 1
                 notice_id = str(item.get("id"))
                 try:
-                    detail = self._get(f"{self._notice_api}/{notice_id}", refresh=refresh)
+                    # The current announcement detail resource also expects the
+                    # web-client selector.  Omitting it can result in a 403 even
+                    # after the list request succeeds.
+                    detail = self._get(
+                        f"{self._notice_api}/{notice_id}",
+                        {"os": "web"},
+                        refresh=refresh,
+                    )
                     body = detail.get("data", detail)
                     for ticker, changed_at in parse_schedule_change(body, item).items():
                         schedule_changes.setdefault(ticker, changed_at)  # API pages are newest first

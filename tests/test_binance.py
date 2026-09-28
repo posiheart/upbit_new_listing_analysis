@@ -1,5 +1,5 @@
 import requests
-from listing_analysis.binance import BinanceClient,contracts_from_exchange_info,map_contract
+from listing_analysis.binance import BASE_URLS,BINANCE_HEADERS,BinanceClient,contracts_from_exchange_info,map_contract
 
 def contracts():
     return contracts_from_exchange_info({"symbols":[
@@ -46,3 +46,8 @@ def test_non_json_waf_response_falls_back_without_retries():
     session=Session()
     assert BinanceClient(retries=2,session=session,base_urls=("https://waf","https://ok")).exchange_info()=={"symbols":[]}
     assert session.urls==["https://waf/fapi/v1/exchangeInfo","https://ok/fapi/v1/exchangeInfo"]
+
+def test_official_primary_host_and_browser_headers_are_used():
+    assert BASE_URLS[0]=="https://fapi.binance.com"
+    assert "www.binance.com" not in BASE_URLS
+    assert "Mozilla/5.0" in BINANCE_HEADERS["User-Agent"]
